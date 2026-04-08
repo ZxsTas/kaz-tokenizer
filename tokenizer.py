@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Kazakh Tokenizer - Morphological Analysis
-Research-based: SozKZ (50K BPE), ByteKaz (byte-level), IS2AI corpus
+Optimized Kazakh Tokenizer - O(n) performance
 """
 
 import re
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from enum import Enum
 
 
@@ -24,8 +23,9 @@ class Morpheme:
 
 
 class Harmony:
-    FRONT = {'е', 'і', 'ө', 'ү'}
-    BACK = {'а', 'ы', 'о', 'у'}
+    FRONT = frozenset({'е', 'і', 'ө', 'ү'})
+    BACK = frozenset({'а', 'ы', 'о', 'у'})
+    VOWELS = FRONT | BACK
     
     @staticmethod
     def last_class(word: str) -> str:
@@ -37,92 +37,82 @@ class Harmony:
         return "neutral"
     
     @staticmethod
-    def check(root: str, suffix: str) -> bool:
-        cls = Harmony.last_class(root)
-        sfx_v = [c.lower() for c in suffix if c.lower() in Harmony.FRONT | Harmony.BACK]
+    def check(root: str, suffix: str, root_class: str) -> bool:
+        sfx_v = next((c.lower() for c in suffix if c.lower() in Harmony.VOWELS), None)
         if not sfx_v:
             return True
-        return (cls == "front" and sfx_v[0] in Harmony.FRONT) or \
-               (cls == "back" and sfx_v[0] in Harmony.BACK) or \
-               cls == "neutral"
+        if root_class == "front":
+            return sfx_v in Harmony.FRONT
+        if root_class == "back":
+            return sfx_v in Harmony.BACK
+        return True
 
 
 class Morphology:
-    NOUN_DERIV = {
-        "-шы/-ші": "agent",
-        "-лық/-лік": "quality",
-        "-ша/-ше": "dim",
-        "-ңғы/-нғы": "rel",
-        "-ын/-ін/-ун/-үн": "collect",
+    SUFFIXES = {
+        "-шы/-ші": ("agent", True),
+        "-лық/-лік": ("quality", True),
+        "-ша/-ше": ("dim", True),
+        "-ңғы/-нғы": ("rel", True),
+        "-ын/-ін/-ун/-үн": ("collect", True),
+        "-лар/-лер": ("pl", False),
+        "-ым/-ім/-ум/-үм": ("poss.1sg", False),
+        "-ның/-нің": ("gen", False),
+        "-ға/-ге/-қа/-ке": ("dat", False),
+        "-да/-де/-та/-те": ("loc", False),
+        "-дан/-ден": ("abl", False),
+        "-ты/-ті/-ды/-ді": ("acc", False),
+        "-та/-те": ("hab", True),
+        "-ғал/-гел": ("incp", True),
+        "-ыл/-іл": ("pass", True),
+        "-ды/-ді": ("past", False),
+        "-жы/-жі": ("cont", False),
+        "-май/-мей": ("neg", False),
+        "-ай/-ей": ("pres", False),
     }
     
-    NOUN_INFL = {
-        "-лар/-лер": "pl",
-        "-ым/-ім/-ум/-үм": "poss.1sg",
-        "-ның/-нің": "gen",
-        "-ға/-ге/-қа/-ке": "dat",
-        "-да/-де/-та/-те": "loc",
-        "-дан/-ден": "abl",
-        "-ты/-ті/-ды/-ді": "acc",
-    }
+    SUFFIX_VARIANTS: Dict[str, Tuple[str, bool]] = {}
     
-    VERB_DERIV = {
-        "-та/-те": "hab",
-        "-ғал/-гел": "incp",
-        "-ыл/-іл": "pass",
-    }
-    
-    VERB_INFL = {
-        "-ды/-ді": "past",
-        "-жы/-жі": "cont",
-        "-май/-мей": "neg",
-        "-ай/-ей": "pres",
-    }
+    @classmethod
+    def init_variants(cls):
+        for key, (gloss, is_deriv) in cls.SUFFIXES.items():
+            for variant in key.split('/'):
+                cls.SUFFIX_VARIANTS[variant] = (gloss, is_deriv)
 
 
 class Tokenizer:
+    WORD_PATTERN = re.compile(r'\b[а-яғқңөәүіa-z]+\b', re.IGNORECASE)
+    
     def __init__(self):
-        self.all_morph = {
-            **Morphology.NOUN_DERIV,
-            **Morphology.NOUN_INFL,
-            **Morphology.VERB_DERIV,
-            **Morphology.VERB_INFL
-        }
+        Morphology.init_variants()
+        self.variants = Morphology.SUFFIX_VARIANTS
+        self.sorted_variants = sorted(self.variants.keys(), key=len, reverse=True)
     
     def segment(self, word: str) -> List[Morpheme]:
         morphs = []
-        rem = word
-        pos = 0
-        
-        sorted_m = sorted(self.all_morph.items(), 
-                         key=lambda x: len(x[0].split('/')[0]), 
-                         reverse=True)
+        rem = word.lower()
+        root_class = None
         
         while len(rem) > 2:
             found = False
-            
-            for suffix_key, gloss in sorted_m:
-                for var in suffix_key.split('/'): 
-                    if rem.endswith(var):
-                        root = rem[:-len(var)]
-                        
-                        if Harmony.check(root, var):
-                            is_deriv = any(k in suffix_key for k in \
-                                         list(Morphology.NOUN_DERIV.keys()) + \
-                                         list(Morphology.VERB_DERIV.keys()))
-                            
-                            morphs.append(Morpheme(
-                                form=var,
-                                type=MorphType.DERIV if is_deriv else MorphType.INFL,
-                                gloss=gloss
-                            ))
-                            rem = root
-                            pos += 1
-                            found = True
-                            break
-                
-                if found:
-                    break
+            for variant in self.sorted_variants:
+                if rem.endswith(variant):
+                    root = rem[:-len(variant)]
+                    
+                    if not root_class:
+                        root_class = Harmony.last_class(root)
+                    
+                    if Harmony.check(root, variant, root_class):
+                        gloss, is_deriv = self.variants[variant]
+                        morphs.append(Morpheme(
+                            form=variant,
+                            type=MorphType.DERIV if is_deriv else MorphType.INFL,
+                            gloss=gloss
+                        ))
+                        rem = root
+                        root_class = Harmony.last_class(rem)
+                        found = True
+                        break
             
             if not found:
                 break
@@ -142,8 +132,11 @@ class Tokenizer:
         }
     
     def batch(self, text: str) -> List[Dict]:
-        words = re.findall(r'\b[а-яғқңөәүіa-z]+\b', text.lower())
+        words = self.WORD_PATTERN.findall(text.lower())
         return [self.analyze(w) for w in words]
+    
+    def batch_fast(self, texts: List[str]) -> List[List[Dict]]:
+        return [self.batch(text) for text in texts]
 
 
 if __name__ == "__main__":
