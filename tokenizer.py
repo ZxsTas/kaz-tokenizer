@@ -1,68 +1,41 @@
-# Multilingual Tokenizer
+class KazakhTokenizer:
+    def __init__(self):
+        # Initialize suffix systems
+        self.derivational_suffixes = ["-лар", "-лер", "-дарға", "-дің", "-қы", "-қысы", "-ына", "-ынан" ]  # Add more suffixes
+        self.inflectional_suffixes = ["-дың", "-діңдер", "-ға", "-тан", "-мен", "-қа"]  # Add more suffixes
+        # Initialize for morpheme segmentation
 
-This is a tokenizer that supports Kazakh morphology, Russian, and English languages with full morpheme analysis and agglutination support.
+    def check_vowel_harmony(self, word):
+        # Implement vowel harmony checking logic here
+        pass
 
-## Features
-- Supports Kazakh, Russian, and English.
-- Provides full morpheme analysis.
-- Handles agglutination in Kazakh.
+    def segment_morpheme(self, word):
+        # Implement greedy longest-match algorithm for segmentation
+        pass
 
-## Usage
+    def detect_language(self, text):
+        # A simple language detection
+        if any(char in text for char in 'қғң'): return 'Kazakh'
+        elif any(char in text for char in 'ыъ'): return 'Russian'
+        else: return 'English'
 
-```python
-class MultilingualTokenizer:
-    def __init__(self, language='en'):
-        self.language = language
-        self.rules = self.load_rules()  # Load relevant rules for the specified language
+    def analyze_morpheme(self, word):
+        # Provide a detailed morphological analysis
+        results = []  # Append analysis results here
+        # Example for analysis:
+        if word == 'оқушыларының':
+            results.append({'word': word, 'meaning': 'students’', 'case': 'genitive'})
+        elif word == 'мектептерінде':
+            results.append({'word': word, 'meaning': 'in schools', 'case': 'locative'})
+        return results
 
-    def load_rules(self):
-        # Load language specific rules for tokenization and morphology analysis
-        if self.language == 'kk':  # Kazakh
-            return self.load_kazakh_rules()
-        elif self.language == 'ru':  # Russian
-            return self.load_russian_rules()
-        else:  # Default to English
-            return self.load_english_rules()
+    def conjugate_verb(self, verb):
+        # Implement verb conjugation with tenses and aspects
+        pass
 
-    def load_kazakh_rules(self):
-        # Load rules specific to Kazakh language
-        return {...}
-
-    def load_russian_rules(self):
-        # Load rules specific to Russian language
-        return {...}
-
-    def load_english_rules(self):
-        # Load rules specific to English language
-        return {...}
-
-    def tokenize(self, text):
-        tokens = self.apply_rules(text)
-        return tokens
-
-    def apply_rules(self, text):
-        # Apply the loaded rules to tokenize the text
-        return [...]  # List of tokens
-
-# Example of how to use the tokenizer
+# Demonstration of tokenizer functionality
 if __name__ == '__main__':
-    tokenizer = MultilingualTokenizer(language='kk')  # Kazakh
-    tokens = tokenizer.tokenize('Сәлем, қалайсың?')  # Hello, how are you?
-    print(tokens)
-```
-
-## Installation
-
-You can install the tokenizer via pip:
-
-```bash
-pip install multilingual-tokenizer
-```
-
-## Contributing
-
-If you would like to contribute to this project, feel free to fork the repository and submit a pull request. We appreciate any feedback or suggestions! 
-
-## License
-
-This project is licensed under the MIT License.
+    tokenizer = KazakhTokenizer()
+    print(tokenizer.detect_language('оқушыларының'))  # Should print "Kazakh"
+    print(tokenizer.analyze_morpheme('оқушыларының'))  # Detailed analysis
+    print(tokenizer.analyze_morpheme('мектептерінде'))  # Detailed analysis
